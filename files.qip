@@ -1,0 +1,6 @@
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vtg_raster.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vtg_patterns.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vtg9000_core.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/vtg_controls.sv
+set_global_assignment -name SDC_FILE VTG9000.sdc
+set_global_assignment -name SYSTEMVERILOG_FILE VTG9000.sv

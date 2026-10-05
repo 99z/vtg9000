@@ -1,0 +1,25 @@
+{
+  "source": "Extron VTG 400 DVI firmware/update package",
+  "files": [
+    {
+      "name": "VTG_400_DVI_v2x05.BIN",
+      "sha256": "e01f4a4a15b1bb3eeb31c462fb5510005fcc2ce59e98b416a2094c2684661f04",
+      "role": "device firmware image"
+    },
+    {
+      "name": "VTG400DVI_FW2x05.exe",
+      "sha256": "899cef625edf601ed3a27c209a58f78d3427097cf49bb369720a6fad5ce84b53",
+      "role": "model-specific Windows update package"
+    },
+    {
+      "name": "FirmwareLoader_v5x3.exe",
+      "sha256": "dceeaaae244ad78ade996b391092b5c4e16d7f1eee87881b84ea33aea088af8b",
+      "role": "Windows firmware loader"
+    },
+    {
+      "name": "VTG 400 DVI FW Release Notes v2x05.pdf",
+      "sha256": "b4e9cf89bdb82208aebc9a3f61ada50fbf1cbf3c1d0e5cf8d8f282cebac86747",
+      "role": "11-page firmware release notes"
+    }
+  ]
+}
