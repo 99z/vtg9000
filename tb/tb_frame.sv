@@ -5,7 +5,7 @@
 // keeping this renderer independent of raster timing makes golden images a
 // stable check of pattern logic rather than a capture of either scan mode.
 module tb_frame;
-	reg [3:0] pattern = 0;
+	reg [4:0] pattern = 0;
 	reg [6:0] level_percent = 100;
 	reg [11:0] x = 0;
 	reg [11:0] y = 0;
@@ -15,21 +15,25 @@ module tb_frame;
 	integer output_file;
 	integer pattern_arg;
 	integer level_arg;
+	integer setup_arg;
+	reg setup_75 = 0;
 	integer ix;
 	integer iy;
 	integer active_pixels;
 	reg [1023:0] output_path;
 
-	vtg_patterns dut (
+	vtg_patterns dut (.clk(1'b0), .geo_circle_white(1'b0), .geo_mono_inner(1'b0), .geo_mono_ring(1'b0),
+        .geo_wedge_inside(1'b0), .geo_wedge_grating(1'b0), .native_size(2'd0),
 		.x(x), .y(y), .active(1'b1), .pattern(pattern),
-		.level_percent(level_percent), .invert(1'b0),
+		.level_percent(level_percent), .setup_75(setup_75), .invert(1'b0),
 		.raster_border(1'b0), .channel_enable(3'b111),
 		.red(red), .green(green), .blue(blue)
 	);
 
 	initial begin
-		if ($value$plusargs("PATTERN=%d", pattern_arg)) pattern = pattern_arg[3:0];
+		if ($value$plusargs("PATTERN=%d", pattern_arg)) pattern = pattern_arg[4:0];
 		if ($value$plusargs("LEVEL=%d", level_arg)) level_percent = level_arg[6:0];
+		if ($value$plusargs("SETUP=%d", setup_arg)) setup_75 = (setup_arg != 0);
 		if (!$value$plusargs("OUT=%s", output_path)) output_path = "build/frame.ppm";
 
 		output_file = $fopen(output_path, "wb");

@@ -1,3 +1,20 @@
 .DS_Store
-fw/*
-tmp/*
+
+# Local/private material
+/.local/
+/.agents/
+/.aws/
+/.codex/
+/fw/
+/tmp/
+
+# Generated simulation and Quartus outputs
+/build/
+/output_files/
+/db/
+/incremental_db/
+/build_id.v
+/jtag.cdf
+/obj_dir/
+__pycache__/
+*.py[cod]

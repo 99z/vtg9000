@@ -4,8 +4,9 @@ module tb_vtg9000_core;
 	reg clk = 0;
 	reg reset = 1;
 	reg interlaced = 0;
-	reg [3:0] pattern = 0;
+	reg [4:0] pattern = 0;
 	reg [6:0] level_percent = 50;
+	reg setup_75 = 0;
 	reg invert = 0;
 	reg raster_border = 0;
 	reg [2:0] channel_enable = 3'b111;
@@ -28,9 +29,10 @@ module tb_vtg9000_core;
 	vtg9000_core dut (
 		.clk(clk),
 		.reset(reset),
-		.interlaced(interlaced),
+		.video_mode(interlaced ? 3'd0 : 3'd1),
 		.pattern(pattern),
 		.level_percent(level_percent),
+		.setup_75(setup_75),
 		.invert(invert),
 		.raster_border(raster_border),
 		.channel_enable(channel_enable),
@@ -102,7 +104,11 @@ module tb_vtg9000_core;
 			if (field) $fatal(1, "240p unexpectedly asserted field parity");
 			if (de !== ((expected_x < 720) && expected_active))
 				$fatal(1, "240p DE mismatch at raster (%0d,%0d)", x, expected_v);
-			if (de) active_pixels = active_pixels + 1;
+			if (hsync !== !((expected_x >= 736) && (expected_x < 798)))
+                $fatal(1, "HSync porch/phase mismatch at sample %0d", n);
+            if (hblank !== (expected_x >= 720) || vblank !== !expected_active)
+                $fatal(1, "blanking mismatch at sample %0d", n);
+            if (de) active_pixels = active_pixels + 1;
 			if (!hsync) low_hsync_count = low_hsync_count + 1;
 			if (!vsync) low_vsync_pixels = low_vsync_pixels + 1;
 
@@ -136,9 +142,9 @@ module tb_vtg9000_core;
 		active_pixels = 0;
 		field0_samples = 0;
 		field1_samples = 0;
-		for (n = 0; n < 858 * 525; n = n + 1) begin
+		for (n = 0; n < 858 * 525 * 2; n = n + 1) begin
 			expected_x = n % 858;
-			expected_v = n / 858;
+			expected_v = (n / 858) % 525;
 			expected_field = (expected_v > 262) ||
 				((expected_v == 262) && (expected_x >= 429));
 			expected_active =
@@ -161,7 +167,11 @@ module tb_vtg9000_core;
 				$fatal(1, "480i DE mismatch at raster (%0d,%0d)", x, expected_v);
 			if (vsync !== ~expected_vsync)
 				$fatal(1, "480i VSync phase mismatch at raster (%0d,%0d)", x, expected_v);
-			if (de) active_pixels = active_pixels + 1;
+			if (hsync !== !((expected_x >= 736) && (expected_x < 798)))
+                $fatal(1, "HSync porch/phase mismatch at sample %0d", n);
+            if (hblank !== (expected_x >= 720) || vblank !== !expected_active)
+                $fatal(1, "blanking mismatch at sample %0d", n);
+            if (de) active_pixels = active_pixels + 1;
 			if (!hsync) low_hsync_count = low_hsync_count + 1;
 			if (!vsync) low_vsync_pixels = low_vsync_pixels + 1;
 			if (field) field1_samples = field1_samples + 1;
@@ -177,14 +187,14 @@ module tb_vtg9000_core;
 
 		if (!frame_start || (x != 0) || (y != 0) || field)
 			$fatal(1, "480i complete frame did not wrap to field 0");
-		if (low_hsync_count != 62 * 525)
+		if (low_hsync_count != 62 * 525 * 2)
 			$fatal(1, "480i HSync width mismatch: %0d samples", low_hsync_count);
-		if (low_vsync_pixels != 3 * 858 * 2)
+		if (low_vsync_pixels != 3 * 858 * 4)
 			$fatal(1, "480i VSync width mismatch: %0d samples", low_vsync_pixels);
-		if (active_pixels != 720 * 480)
+		if (active_pixels != 720 * 480 * 2)
 			$fatal(1, "480i active sample mismatch: %0d", active_pixels);
-		if ((field0_samples != 858 * 262 + 429) ||
-		    (field1_samples != 858 * 262 + 429))
+		if ((field0_samples != (858 * 262 + 429) * 2) ||
+		    (field1_samples != (858 * 262 + 429) * 2))
 			$fatal(1, "480i fields were not exactly 262.5 lines: %0d/%0d", field0_samples, field1_samples);
 
 		// Pattern checks use the 240p raster's canonical even-row addressing.
@@ -223,10 +233,10 @@ module tb_vtg9000_core;
 
 		force dut.raster.h_count = 12'd540;
 		forced_v_count = 12'd218; // canonical pattern row 400
-		expect_rgb(8'd12, 8'd12, 8'd12, "SMPTE below-black patch");
+		expect_rgb(8'd0, 8'd0, 8'd0, "SMPTE below-black patch");
 
 		force dut.raster.h_count = 12'd640;
-		expect_rgb(8'd25, 8'd25, 8'd25, "SMPTE above-black patch");
+		expect_rgb(8'd10, 8'd10, 8'd10, "SMPTE above-black patch");
 
 		force dut.raster.h_count = 12'd650;
 		forced_v_count = 12'd18; // canonical pattern row 0
@@ -244,27 +254,27 @@ module tb_vtg9000_core;
 		pattern = 8;
 		force dut.raster.h_count = 12'd0;
 		forced_v_count = 12'd18; // canonical pattern row 0
-		expect_rgb(8'd16, 8'd16, 8'd16, "PLUGE nominal black background");
+		expect_rgb(8'd0, 8'd0, 8'd0, "PLUGE nominal black background");
 
 		force dut.raster.h_count = 12'd80;
 		forced_v_count = 12'd68; // canonical pattern row 100
-		expect_rgb(8'd12, 8'd12, 8'd12, "PLUGE left minus-two bar");
+		expect_rgb(8'd0, 8'd0, 8'd0, "PLUGE left minus-two bar");
 		force dut.raster.h_count = 12'd130;
-		expect_rgb(8'd25, 8'd25, 8'd25, "PLUGE left plus-four bar");
+		expect_rgb(8'd10, 8'd10, 8'd10, "PLUGE left plus-four bar");
 		force dut.raster.h_count = 12'd190;
-		expect_rgb(8'd20, 8'd20, 8'd20, "PLUGE left plus-two bar");
+		expect_rgb(8'd5, 8'd5, 8'd5, "PLUGE left plus-two bar");
 
 		force dut.raster.h_count = 12'd340;
 		forced_v_count = 12'd63; // canonical pattern row 90
-		expect_rgb(8'd235, 8'd235, 8'd235, "PLUGE 100-percent center box");
+		expect_rgb(8'd255, 8'd255, 8'd255, "PLUGE 100-percent center box");
 		forced_v_count = 12'd78; // canonical pattern row 120
-		expect_rgb(8'd224, 8'd224, 8'd224, "PLUGE 95-percent inset");
+		expect_rgb(8'd242, 8'd242, 8'd242, "PLUGE 95-percent inset");
 		forced_v_count = 12'd118; // canonical pattern row 200
-		expect_rgb(8'd180, 8'd180, 8'd180, "PLUGE 75-percent center box");
+		expect_rgb(8'd191, 8'd191, 8'd191, "PLUGE 75-percent center box");
 		forced_v_count = 12'd158; // canonical pattern row 280
-		expect_rgb(8'd126, 8'd126, 8'd126, "PLUGE 50-percent center box");
+		expect_rgb(8'd128, 8'd128, 8'd128, "PLUGE 50-percent center box");
 		forced_v_count = 12'd198; // canonical pattern row 360
-		expect_rgb(8'd71, 8'd71, 8'd71, "PLUGE 25-percent center box");
+		expect_rgb(8'd64, 8'd64, 8'd64, "PLUGE 25-percent center box");
 
 		pattern = 2;
 		force dut.raster.h_count = 12'd90;

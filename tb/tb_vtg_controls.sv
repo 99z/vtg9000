@@ -3,14 +3,14 @@
 module tb_vtg_controls;
 	reg clk = 0;
 	reg reset = 1;
-	reg [3:0] status_pattern = 4'd2;
+	reg [4:0] status_pattern = 5'd2;
 	reg [6:0] status_level = 7'd50;
 	reg status_invert = 0;
 	reg status_border = 0;
 	reg [10:0] ps2_key = 0;
 	reg [7:0] joystick_0 = 0;
 	reg [7:0] joystick_1 = 0;
-	wire [3:0] pattern;
+	wire [4:0] pattern;
 	wire [6:0] level;
 	wire invert;
 	wire border;
@@ -53,7 +53,7 @@ module tb_vtg_controls;
 	endtask
 
 	task expect_controls(
-		input [3:0] expected_pattern,
+		input [4:0] expected_pattern,
 		input [6:0] expected_level,
 		input expected_invert,
 		input expected_border,
@@ -72,32 +72,32 @@ module tb_vtg_controls;
 		repeat (2) tick();
 		reset = 0;
 		tick();
-		expect_controls(4'd2, 7'd50, 0, 0, "initial OSD state");
+		expect_controls(5'd2, 7'd50, 0, 0, "initial OSD state");
 
 		// Keyboard right changes on the initial press and wraps at the end.
 		key_event(1, 1, 8'h74);
 		tick();
-		expect_controls(4'd3, 7'd50, 0, 0, "keyboard next pattern");
+		expect_controls(5'd3, 7'd50, 0, 0, "keyboard next pattern");
 		if (!status_update) $fatal(1, "keyboard navigation did not request OSD sync");
 		key_event(0, 1, 8'h74);
 		tick();
 
-		status_pattern = 4'd0;
+		status_pattern = 5'd0;
 		tick();
 		joystick_0[1] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd50, 0, 0, "controller previous-pattern wrap");
+		expect_controls(5'd17, 7'd50, 0, 0, "controller previous-pattern wrap");
 		joystick_0[1] = 1'b0;
 		tick();
 
 		// Either controller may navigate. Up raises level and repeats while held.
 		joystick_1[3] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd51, 0, 0, "controller level increment");
+		expect_controls(5'd17, 7'd51, 0, 0, "controller level increment");
 		repeat (3) tick();
-		expect_controls(4'd14, 7'd51, 0, 0, "level repeat delay");
+		expect_controls(5'd17, 7'd51, 0, 0, "level repeat delay");
 		tick();
-		expect_controls(4'd14, 7'd52, 0, 0, "held level repeat");
+		expect_controls(5'd17, 7'd52, 0, 0, "held level repeat");
 		joystick_1[3] = 1'b0;
 		tick();
 
@@ -105,12 +105,12 @@ module tb_vtg_controls;
 		tick();
 		joystick_0[3] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd100, 0, 0, "level upper clamp");
+		expect_controls(5'd17, 7'd100, 0, 0, "level upper clamp");
 		joystick_0[3] = 1'b0;
 		tick();
 		joystick_0[2] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd99, 0, 0, "controller level decrement");
+		expect_controls(5'd17, 7'd99, 0, 0, "controller level decrement");
 		joystick_0[2] = 1'b0;
 		tick();
 
@@ -118,54 +118,76 @@ module tb_vtg_controls;
 		status_level = 7'd95;
 		tick();
 		key_event(1, 1, 8'h7d);
-		expect_controls(4'd14, 7'd100, 0, 0, "Page Up saturated coarse step");
+		expect_controls(5'd17, 7'd100, 0, 0, "Page Up saturated coarse step");
 		key_event(0, 1, 8'h7d);
 		key_event(1, 1, 8'h6c);
-		expect_controls(4'd14, 7'd0, 0, 0, "Home zero-percent shortcut");
+		expect_controls(5'd17, 7'd0, 0, 0, "Home zero-percent shortcut");
 		key_event(0, 1, 8'h6c);
 		key_event(1, 1, 8'h69);
-		expect_controls(4'd14, 7'd100, 0, 0, "End 100-percent shortcut");
+		expect_controls(5'd17, 7'd100, 0, 0, "End 100-percent shortcut");
 		key_event(0, 1, 8'h69);
 		key_event(1, 1, 8'h7a);
-		expect_controls(4'd14, 7'd90, 0, 0, "Page Down coarse step");
+		expect_controls(5'd17, 7'd90, 0, 0, "Page Down coarse step");
 		key_event(0, 1, 8'h7a);
 
 		// I/R and the first two named controller buttons toggle useful modes.
 		key_event(1, 0, 8'h43);
-		expect_controls(4'd14, 7'd90, 1, 0, "keyboard invert toggle");
+		expect_controls(5'd17, 7'd90, 1, 0, "keyboard invert toggle");
 		key_event(0, 0, 8'h43);
 		key_event(1, 0, 8'h2d);
-		expect_controls(4'd14, 7'd90, 1, 1, "keyboard raster toggle");
+		expect_controls(5'd17, 7'd90, 1, 1, "keyboard raster toggle");
 		key_event(0, 0, 8'h2d);
 		joystick_0[4] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd90, 0, 1, "controller invert toggle");
+		expect_controls(5'd17, 7'd90, 0, 1, "controller invert toggle");
 		joystick_0[4] = 1'b0;
 		tick();
 		joystick_0[5] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd90, 0, 0, "controller raster toggle");
+		expect_controls(5'd17, 7'd90, 0, 0, "controller raster toggle");
 		joystick_0[5] = 1'b0;
 		tick();
 
 		joystick_0[6] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd100, 0, 0, "controller coarse increase");
+		expect_controls(5'd17, 7'd100, 0, 0, "controller coarse increase");
 		joystick_0[6] = 1'b0;
 		tick();
 		joystick_0[7] = 1'b1;
 		tick();
-		expect_controls(4'd14, 7'd90, 0, 0, "controller coarse decrease");
+		expect_controls(5'd17, 7'd90, 0, 0, "controller coarse decrease");
 		joystick_0[7] = 1'b0;
 		tick();
 
 		// A later OSD change remains authoritative.
-		status_pattern = 4'd8;
+		status_pattern = 5'd8;
 		status_level = 7'd25;
 		status_invert = 1'b1;
 		status_border = 1'b1;
 		tick();
-		expect_controls(4'd8, 7'd25, 1, 1, "OSD resynchronization");
+		expect_controls(5'd8, 7'd25, 1, 1, "OSD resynchronization");
+
+		// The wider pattern selector reaches both new grids and the monoscope,
+		// then wraps in both directions across the full eighteen-pattern menu.
+		status_pattern = 5'd14;
+		tick();
+		joystick_0[0] = 1; tick();
+		expect_controls(5'd15, 7'd25, 1, 1, "medium grid navigation");
+		joystick_0[0] = 0; tick();
+		joystick_0[0] = 1; tick();
+		expect_controls(5'd16, 7'd25, 1, 1, "fine grid navigation");
+		joystick_0[0] = 0; tick();
+		joystick_0[0] = 1; tick();
+		expect_controls(5'd17, 7'd25, 1, 1, "monoscope navigation");
+		joystick_0[0] = 0; tick();
+		joystick_0[0] = 1; tick();
+		expect_controls(5'd0, 7'd25, 1, 1, "next-pattern wrap");
+		joystick_0[0] = 0; tick();
+		status_pattern = 5'd31; tick();
+		expect_controls(5'd0, 7'd25, 1, 1, "invalid saved pattern clamp");
+		joystick_0[0] = 1; tick();
+		joystick_0[0] = 0; tick(); tick();
+		expect_controls(5'd1, 7'd25, 1, 1, "navigation after invalid saved pattern");
 
 		$display("PASS: keyboard/controller navigation and OSD synchronization");
 		$finish;

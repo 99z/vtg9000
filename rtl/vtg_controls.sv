@@ -7,25 +7,27 @@ module vtg_controls #(
 )(
 	input  wire         clk,
 	input  wire         reset,
-	input  wire [3:0]   status_pattern,
+	input  wire [4:0]   status_pattern,
 	input  wire [6:0]   status_level,
 	input  wire         status_invert,
 	input  wire         status_border,
 	input  wire [10:0]  ps2_key,
 	input  wire [7:0]   joystick_0,
 	input  wire [7:0]   joystick_1,
-	output reg  [3:0]   pattern,
+	output reg  [4:0]   pattern,
 	output reg  [6:0]   level,
 	output reg          invert,
 	output reg          border,
 	output reg          status_update
 );
 
+localparam [4:0] LAST_PATTERN = 5'd17;
+
 localparam [1:0] DIR_NONE = 2'd0;
 localparam [1:0] DIR_NEG  = 2'd1;
 localparam [1:0] DIR_POS  = 2'd2;
 
-reg [3:0] seen_pattern;
+reg [4:0] seen_pattern;
 reg [6:0] seen_level;
 reg       seen_invert;
 reg       seen_border;
@@ -75,7 +77,7 @@ always @(posedge clk) begin
 	status_update <= 1'b0;
 
 	if (reset) begin
-		pattern <= status_pattern;
+		pattern <= (status_pattern <= LAST_PATTERN) ? status_pattern : 5'd0;
 		level <= status_level;
 		invert <= status_invert;
 		border <= status_border;
@@ -97,7 +99,7 @@ always @(posedge clk) begin
 		// Follow changes made in the OSD. Key/controller changes are sent back
 		// through status_set, so the OSD and direct controls converge on one state.
 		if (status_pattern != seen_pattern) begin
-			pattern <= status_pattern;
+			pattern <= (status_pattern <= LAST_PATTERN) ? status_pattern : 5'd0;
 			seen_pattern <= status_pattern;
 		end
 		if (status_level != seen_level) begin
@@ -136,7 +138,7 @@ always @(posedge clk) begin
 			end
 		end
 
-		// D-pad/arrow horizontal navigation wraps through all 15 patterns.
+		// D-pad/arrow horizontal navigation wraps through all 18 patterns.
 		if (horizontal == DIR_NONE) begin
 			horizontal_d <= DIR_NONE;
 			horizontal_repeat <= 0;
@@ -144,16 +146,16 @@ always @(posedge clk) begin
 			horizontal_d <= horizontal;
 			horizontal_repeat <= REPEAT_DELAY_CYCLES;
 			if (horizontal == DIR_NEG)
-				pattern <= (pattern == 4'd0) ? 4'd14 : pattern - 1'd1;
+				pattern <= (pattern == 5'd0) ? LAST_PATTERN : pattern - 1'd1;
 			else
-				pattern <= (pattern == 4'd14) ? 4'd0 : pattern + 1'd1;
+				pattern <= (pattern == LAST_PATTERN) ? 5'd0 : pattern + 1'd1;
 			status_update <= 1'b1;
 		end else if (horizontal_repeat == 0) begin
 			horizontal_repeat <= REPEAT_RATE_CYCLES;
 			if (horizontal == DIR_NEG)
-				pattern <= (pattern == 4'd0) ? 4'd14 : pattern - 1'd1;
+				pattern <= (pattern == 5'd0) ? LAST_PATTERN : pattern - 1'd1;
 			else
-				pattern <= (pattern == 4'd14) ? 4'd0 : pattern + 1'd1;
+				pattern <= (pattern == LAST_PATTERN) ? 5'd0 : pattern + 1'd1;
 			status_update <= 1'b1;
 		end else begin
 			horizontal_repeat <= horizontal_repeat - 1;

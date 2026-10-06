@@ -219,3 +219,176 @@ After `sync`, the size and SHA-256 were recomputed on the MiSTer and matched the
 local artifact. The exact RBF was then loaded through `/dev/MiSTer_cmd`, and
 MiSTer's runtime identified the active core as `VTG9000`. Visual confirmation
 of corrected 480i and 240p behavior on the CRT remains pending.
+
+## Black-level, geometry, and sync release R4
+
+Recorded 2026-10-05. This release adds selectable 0 IRE / 7.5 IRE digital
+black pedestals, medium (16x12) and fine (32x24) crosshatches, and an original
+procedural monoscope chart. It removes the core RGBHV/RGBS selector and always
+supplies separate native H/V sync to the MiSTer framework, which applies
+MiSTer.ini output settings. Raster timing, pixel enables, and `sys/` are unchanged.
+
+An expanded arithmetic test exposed a pre-existing 12-bit product overflow in
+the ramp. Widening the multiplication restores a monotonic black-to-white
+ramp. PLUGE and SMPTE PLUGE now use the selected pedestal instead of the prior
+fixed 16-235 range; 0 IRE clips below-black, while 7.5 IRE gives codes 14/19/24/29
+for -2%/black/+2%/+4%. See `manual-pattern-basis.md` for the digital model and
+its analog measurement boundary.
+
+Before compilation, the complete `make test` suite, both Verilator lint passes,
+top-level syntax check, `make verify-frames`, diff whitespace check, and
+unchanged-`sys/` guard passed. All 36 canonical images were decoded and reviewed;
+full-image pedestal arithmetic matched all 16 non-PLUGE patterns. The 12 old
+patterns unaffected by the ramp/PLUGE/SMPTE changes retained their original
+0 IRE hashes. The golden manifest now covers all 18 patterns in both modes.
+Frame generation supports parallel make jobs and writes each completed frame
+through a temporary file before renaming it.
+
+Quartus Prime Lite 17.0.2 Build 602, using the existing staged-source Podman
+wrapper, completed in 9 minutes 33 seconds with zero errors and 31 warnings:
+
+- transport pixel clock: 27.000 MHz (37.037 ns), logical sample enable 13.5 MHz;
+- worst setup slack: +0.451 ns overall, +6.345 ns video clock domain;
+- worst hold slack: +0.253 ns;
+- ALMs: 8,811 / 41,910 (21%);
+- registers: 11,735;
+- block memory: 384,447 / 5,662,720 bits (7%);
+- DSP: 58 / 112 (52%);
+- RBF size: 2,508,568 bytes; and
+- RBF SHA-256:
+  `6038c8b1d1fe8c48a0ca96478a4cfcdb47c52b4e0ef99a0fad8410fbb972116d`.
+
+The 76 staged compiler input files were recorded and checked in
+`build/quartus/source-inputs.sha256`. That manifest's SHA-256 is
+`dda3b921f5780a6e0faabf45bfe010d61bf428369c6564da9045cdf61540f764`.
+
+The user authorized interaction with the wiped MiSTer at `root@192.168.88.18`.
+The release was uploaded under a temporary name, checksum-verified, renamed to:
+
+```text
+/media/fat/_Utility/VTG9000_20261005_r4.rbf
+```
+
+After `sync`, its remote checksum matched again. It was loaded through
+`/dev/MiSTer_cmd`; `/tmp/CORENAME` reported `VTG9000`. The live configuration
+had `vga_mode=subcarrier`, `composite_sync=1`, `vga_scaler=0`, `direct_video=0`,
+and `forced_scandoubler=0`. MiSTer.ini was not modified.
+
+This records digital simulation/image checks, FPGA timing closure, transfer,
+and core loading. Display stability and analog IRE/DAC accuracy for this exact
+RBF still need observed/measured evidence from the intended output path.
+
+
+## Native resolutions release R5
+
+Recorded 2026-10-05 America/New_York (build/load completed 2026-10-06 UTC).
+This release adds native 480p59.94, 916x720p60, 1360x1080p60, and 916x720p120,
+matching the Asteroids reference's HD raster dimensions and compatibility
+cadence. It retains the existing NTSC 480i and 240p timings. See
+[video-modes.md](video-modes.md) for the complete timing table and status mapping.
+
+The video PLL is independently reconfigured between 27 MHz and 128.52 MHz;
+HPS and controls stay at 27 MHz. The direct native stream has 32 aligned
+transport clocks of latency: five geometry stages, three color stages, and
+24 delivery registers. Constant grid/edge comparisons, parallel grayscale
+band encoding, and explicit geometry arithmetic avoid long divider/multiplier
+paths. There is no core framebuffer, scaling, filtering, gamma, or color-space
+conversion. All sys/ files remain byte-identical to the pre-change pinned
+framework inventory.
+
+The release uses the existing framework's `MISTER_DOWNSCALE_NN` build option:
+HDMI downscaling uses nearest-neighbor interpolation. HDMI upscaling remains
+configurable, and the native VGA path is unaffected. This removes the
+framework bilinear downscale path that failed timing at the faster input
+clock. Physical combinational resynthesis is disabled; register duplication
+and retiming remain enabled. Independent PLL domains use asynchronous clock
+groups, and explicit mode/settings synchronizers constrain their subsequent
+stages normally. No intra-video multicycle exception relaxes the 128.52 MHz
+requirement. Failed diagnostic candidates were retained locally and never
+deployed.
+
+Before this release was generated, simulation timing, native patterns,
+29,027 aligned pipeline packets, lint/top syntax, and all 36 unchanged golden
+image hashes passed. The complete seven-bench `make test` suite also passed
+again on the final source. Grayscale checks now cover both rows at every
+native column. The final images were independently rendered using Verilator.
+An additional Verilator raster run passed after replacing variable-expression
+force statements in a temporary testbench copy with explicit constant forces;
+the repository's original Icarus bench passed unchanged. The legacy raster,
+controls, and golden manifest match their pre-feature copies exactly.
+
+Quartus Prime Lite **17.0.2 Build 602**, in the staged-source Podman wrapper,
+completed the final build with zero errors and no timing critical warning.
+The successful artifact and reports are in `build/quartus-r5-attempt10/`:
+
+- video transport clock: 128.52 MHz (7.781 ns), analyzed at the fastest mode;
+- worst setup slack: **+0.093 ns**, in the video domain;
+- worst hold slack: +0.246 ns;
+- worst recovery/removal slack: +4.231 / +0.989 ns;
+- minimum pulse-width slack: +0.778 ns;
+- ALMs: 9,397 / 41,910 (22%);
+- registers: 14,206;
+- block memory: 384,579 / 5,662,720 bits (7%);
+- DSP blocks: 44 / 112 (39%);
+- PLLs: 4 / 6;
+- RBF size: **2,528,996 bytes**; and
+- RBF SHA-256:
+  `6f3b430de35c500edc88f422c1aeb5461a2073a9785fda4f8027cc3e87a410aa`.
+
+`release-setup.rpt`, `release-hold.rpt`, `release-recovery.rpt`,
+`release-removal.rpt`, `release-clocks.rpt`, and `release-unconstrained.rpt`
+retain detailed post-fit evidence. There are zero illegal or unconstrained
+clocks. The pinned framework still has four unconstrained input ports and
+50 unconstrained output ports; this timing result covers the reported internal
+paths and does not establish external DAC/adapter electrical timing accuracy.
+
+The 80 compiler inputs in `source-inputs.sha256` were checked against the
+current checkout. Quartus changed only the QSF `LAST_QUARTUS_VERSION` metadata
+from Standard Edition to Lite Edition. `compiled-VTG9000.qsf` reconstructs the
+exact compiler QSF and matches its manifest hash; `source-verification.txt`
+records the check. The manifest SHA-256 is
+`7a86b226212e87c494f27386078cd49251bf20c123bb70a9d30d9324498c42d7`.
+The named local release is `build/releases/VTG9000_20261005_r5.rbf`.
+
+Under the user's deployment authorization, the release was transferred to
+`root@192.168.88.18` using a temporary filename, SHA-256 checked, renamed without
+overwriting an existing revision, synced, and checked again at:
+
+```text
+/media/fat/_Utility/VTG9000_20261005_r5.rbf
+```
+
+It was loaded through `/dev/MiSTer_cmd`. `/tmp/CORENAME` reported `VTG9000` and
+its modification time advanced to **2026-10-06 00:28:07 UTC**. The remote size
+and SHA-256 matched the local artifact. R4 remains present with its original
+checksum. MiSTer.ini remains unchanged with SHA-256
+`60d0d6b5717e6d762ab9c22990172143e8849d79535b5069986fac71adee25b5`.
+Its live output configuration remains `vga_mode=subcarrier`, `composite_sync=1`,
+`vga_scaler=0`, `direct_video=0`, and `forced_scandoubler=0`.
+
+Transfer and loading are confirmed. Display observation of this exact R5,
+including 480i stability, 240p locking, HD mode switching and physical PLL
+accuracy, remains pending the user's MiSTer test. Analog DAC/IRE accuracy and
+equalizing/serration waveform compliance remain unmeasured.
+
+
+## Repository publication and build-tool safeguards
+
+After the R5 build, the newest RBF was selected for publication in
+`releases/VTG9000_20261005_r5.rbf`, with `SHA256SUMS`, the original STA summary,
+and a reconstructed pre-compile source manifest. Its binary hash is unchanged
+from the file loaded on MiSTer. The source-manifest reconstruction reverses
+only the verified QSF compiler-version metadata rewrite described above.
+
+Generated build outputs and Python caches were removed from Git tracking;
+local files and the MiSTer rollback revision were preserved. Local/private
+paths are ignored. This cleanup does not remove older artifacts from Git
+history or claim a new FPGA build.
+
+The wrapper now refuses all existing output directories, records source hashes
+before compilation separately from post-compile hashes, retains the compiled
+QSF, and returns failure for negative or missing/malformed timing results.
+Nine build-tool regression checks passed. The checker accepted R5's actual
+summary and rejected the preceding candidate's -0.185 ns setup result.
+These tooling changes do not alter the R5 HDL or its RBF; the FPGA was not
+rebuilt for repository publication.

@@ -2,6 +2,9 @@
 
 Recorded before the first VTG400 RBF deployment.
 
+Current connection (user update, 2026-10-05): the MiSTer is on the network;
+use `ssh root@192.168.88.18`. The connection details below are historical.
+
 - Connection: dedicated Ethernet cable to the Ubuntu host
 - Host-side connection: NetworkManager shared mode, `10.42.0.1/24`
 - MiSTer DHCP address during inventory: `10.42.0.157` (not assumed stable)
@@ -25,8 +28,8 @@ vsync_adjust=0
 `direct_video=0` is correct for the initial ordinary-HDMI display test. It must
 only be enabled after powering down and attaching a compatible HDMI-to-analog
 Direct Video adapter. The global `composite_sync=1` setting primarily affects
-the analog path; the core also exposes an explicit RGBHV/RGBS selection so its
-native sync intent is testable.
+the analog path. The original core also exposed an RGBHV/RGBS selector; that
+selector was removed on 2026-10-05, leaving sync formatting to MiSTer.ini.
 
 The connected SuperStation One also has an internal analog DAC. With the
 observed `vga_scaler=0`, that path receives the core's native timing even while

@@ -4,6 +4,11 @@ This file is the starting point for an agent or harness continuing VTG9000.
 Read it together with `AGENTS.md`, then inspect the relevant RTL and tests
 before changing anything.
 
+The README is the short user introduction. Contributor setup, source layout,
+and preview generation are in `docs/development.md`; prospective work is in
+`docs/roadmap.md`. Keep implementation and validation evidence in these
+documents rather than expanding the README.
+
 ## Purpose and scope
 
 VTG9000 is an original MiSTer calibration-pattern core inspired by the Extron
@@ -37,21 +42,58 @@ remaining usable through MiSTer's scaler at higher HDMI resolutions.
 Repository root:
 
 ```text
-/home/nsm/vtg9000/VTG9000_MiSTer
+/home/nsm/src/vtg9000
 ```
 
-The worktree is intentionally not a clean upstream Template_MiSTer checkout.
-It contains the in-progress project conversion from the template/VTG400 names
-to VTG9000, including files currently shown as renamed, removed, modified, and
-untracked by `git status`. Those changes are project work, not disposable build
-output. Do **not** use `git reset --hard`, `git checkout -- .`, or a broad clean
-operation to make the status appear clean.
+The user created this standalone Git repository from the previous project.
+Its imported baseline is commit `0bfc47f` (`v1`). Generated `build/` files and
+Python caches were tracked in that import; repository cleanup removed them
+from Git tracking without deleting the local artifacts. These outputs and
+local/private directories are now ignored. `releases/` publishes only the
+latest RBF with its checksum and evidence. Preserve local work and rollback
+files; do not discard them merely to clean Git status.
 
-Generated files are under `build/` and are ignored. The private MiSTer key, if
-present, is under `.local/` and is ignored; never print, copy, commit, or expose
+Firmware and the manual are now under `fw/` (ignored by Git). The private
+MiSTer key, if present, is under `.local/`; never print, copy, commit, or expose
 it to a container/image.
 
 ## Current implementation
+
+### Native resolution expansion (2026-10-05)
+
+The current source adds a `Resolution` selector at status[27:25], retaining the
+old 15 kHz format bit[18] when Resolution=0. Selections 1..4 are 720x480p59.94,
+916x720p60, 1360x1080p60, and 916x720p120. HD active widths and timing totals
+match the Asteroids reference at commit
+`0f1369fa18cd3522ff60b0471358134e4fb0bdfc`. Existing 480i/240p timing is retained.
+Read `docs/video-modes.md` for the timing table, compatibility mapping, clock
+switching, native pattern geometry, and digital/hardware validation limits.
+
+New HDL is `rtl/vtg_progressive.sv`, `rtl/vtg_video_clock.sv`, and
+`rtl/vtg_geometry_pipe.sv`, manually
+listed in files.qip. `vtg9000_core` now takes video_mode=0..5 instead of an
+interlaced boolean. Pattern modules accept native_size=0..2. HPS and controls
+retain the 27 MHz clock; a separate video PLL reconfigures between 27 MHz and 128.52 MHz.
+It feeds the framework directly and reuses its unmodified pll_cfg_hdmi IP.
+The register transaction and rapid-request tests are in tb/tb_vtg_top.sv.
+The legacy raster module and sys/ remain unchanged. New benches are
+`tb/tb_vtg_modes.sv` and `tb/tb_vtg_native_patterns.sv`; the existing core bench
+now covers two full 480i frames and the top bench covers every mode switch.
+
+Source verification passed: raster/control, native-pattern, and streaming-pipeline benches, warning-free lint and
+top syntax, 36 unchanged golden-frame hashes (Icarus and independent final-source
+Verilator renders), whitespace checking, and the complete sys/ SHA-256 inventory.
+480i assertions now check exact HSync porch positions as well as both half-line
+field phases across two full frames.
+
+R5 is now built, checksum-verified, and loaded on the MiSTer. Quartus Prime
+Lite 17.0.2 Build 602 closed the 128.52 MHz domain with +0.093 ns worst setup
+slack; all reported timing categories passed. The release path has 32 aligned
+transport clocks of streaming latency, with explicit geometry and color stages.
+The framework's existing MISTER_DOWNSCALE_NN option enables nearest-neighbor
+HDMI downscaling; native VGA is unaffected. Read docs/build-and-deployment.md
+for the exact artifact, compiler-input checks, timing reports, and load record.
+No display observation of R5 has been recorded yet.
 
 ### Video modes
 
@@ -73,12 +115,12 @@ line to the corresponding even row of the canonical 720x480 pattern grid.
 The R2 revision used alternating whole 262/263-line fields and a 31 kHz 480p
 alternate. On a real 15 kHz CRT, 480i locked horizontally but visibly bounced
 between fields; the 480p alternate rolled/desynchronized. R3 replaced that
-raster with the exact half-line field structure and real 240p. R3 still needs
-recorded CRT visual confirmation.
+raster with the exact half-line field structure and real 240p. R3 did not receive recorded CRT visual confirmation in the previous session.
+R4 also lacks recorded display observation.
 
 ### Features
 
-There are 15 algorithmic patterns:
+There are 18 algorithmic patterns:
 
 1. 8-color split
 2. Flat field
@@ -95,6 +137,9 @@ There are 15 algorithmic patterns:
 13. Focus
 14. SMPTE bars
 15. EBU bars
+16. Medium crosshatch (16x12)
+17. Fine crosshatch (32x24)
+18. Original monoscope calibration chart
 
 Controls are shared between OSD, keyboard, and either controller:
 
@@ -107,9 +152,15 @@ Controls are shared between OSD, keyboard, and either controller:
 - A/B/X/Y default to four remappable actions: invert, border, level +10%, and
   level -10%.
 
-The OSD also controls RGB channel disables, RGBHV/RGBS, and scan mode. The
-core's RGBS option is a simple `~(hsync ^ vsync)` output. Validate it on the
-actual signal path before making compatibility claims.
+The OSD also controls RGB channel disables, black level (0 IRE / 7.5 IRE,
+default 0 IRE), and native resolution/15 kHz format. The core supplies separate H/V sync, and MiSTer's
+framework applies the user's MiSTer.ini output settings. There is no core sync
+selector. On 2026-10-05 the live MiSTer had `composite_sync=1`.
+
+The pattern selector now uses status[23:19] and five-bit pattern IDs. Black level
+uses status[24]. Level, invert, border, channels, and scan mode retain their
+previous bits; old pattern bits[4:1] and retired sync bit[17] are ignored.
+Keyboard/controller status writeback preserves all unrelated setting bits.
 
 ### Source map
 
@@ -117,13 +168,19 @@ actual signal path before making compatibility claims.
 | --- | --- |
 | `VTG9000.sv` | MiSTer top level, OSD string/status mapping, PLL, native video wiring |
 | `rtl/vtg_raster.sv` | 480i half-line fields and 240p raster timing |
-| `rtl/vtg_patterns.sv` | All pattern pixels and digital levels |
-| `rtl/vtg9000_core.sv` | Raster/pattern composition and logical-pixel enable |
+| `rtl/vtg_patterns.sv` | Pattern selection, digital levels and pedestal |
+| `rtl/vtg_monoscope.sv` | Original procedural geometry/resolution chart |
+| `rtl/vtg9000_core.sv` | Native raster/pattern composition and logical-pixel enable |
+| `rtl/vtg_progressive.sv` | 480p/720p/1080p/720p120 native raster timing |
+| `rtl/vtg_video_clock.sv` | Direct video PLL and frequency reconfiguration |
+| `rtl/vtg_geometry_pipe.sv` | Five explicit geometry arithmetic stages |
 | `rtl/vtg_controls.sv` | OSD/keyboard/controller state synchronization |
 | `tb/tb_vtg9000_core.sv` | Raster, sync, field-phase, and pattern assertions |
 | `tb/tb_vtg_controls.sv` | Direct-control behavior tests |
 | `tb/tb_frame.sv` | Canonical 720x480 PPM renderer for golden images |
-| `tb/golden_frames.sha256` | Expected hashes for 15 pattern renders |
+| `tb/tb_vtg_pattern_updates.sv` | Both pedestal modes, PLUGE, grids, chart and blanking |
+| `tb/tb_vtg_top.sv` | OSD writeback and separate H/V sync wiring |
+| `tb/golden_frames.sha256` | Expected hashes for 36 renders (18 patterns, two pedestal modes) |
 | `docs/manual-pattern-basis.md` | Manual-derived pattern decisions and limits |
 | `docs/firmware-evidence.md` | What was actually extracted from firmware versus historical claims |
 | `docs/build-and-deployment.md` | Build, deployment, and RBF history |
@@ -132,9 +189,56 @@ actual signal path before making compatibility claims.
 change it to capture a scan mode: golden images verify the canonical artwork,
 not temporal raster behavior.
 
-## Verified R3 build and deployment
+## Current R5 build and deployment
 
-The latest built/deployed revision is:
+The current built/deployed revision (2026-10-05 local date) is:
+
+```text
+MiSTer file: /media/fat/_Utility/VTG9000_20261005_r5.rbf
+Local file:  build/releases/VTG9000_20261005_r5.rbf
+Published:   releases/VTG9000_20261005_r5.rbf
+Size:        2,528,996 bytes
+SHA-256:     6f3b430de35c500edc88f422c1aeb5461a2073a9785fda4f8027cc3e87a410aa
+```
+
+All seven benches, lint/top syntax, 29,027 aligned pipeline packets, and 36
+unchanged golden-frame hashes passed. Quartus 17.0.2 build/reports are in
+build/quartus-r5-attempt10. Worst setup/hold slacks are +0.093/+0.246 ns;
+recovery/removal/pulse-width checks passed. No illegal/unconstrained clocks
+were reported; pinned framework external I/O constraints retain their existing
+limits. The 80 compiler inputs match the checkout except for Quartus's
+verified LAST_QUARTUS_VERSION metadata rewrite in its staged QSF.
+
+The exact RBF was remotely SHA-256 verified and loaded via /dev/MiSTer_cmd.
+CORENAME reports VTG9000, updated at 2026-10-06 00:28:07 UTC. R4 is retained,
+and MiSTer.ini is unchanged. Hardware display observation of this exact R5
+remains pending the user's test; do not call it hardware-validated.
+
+## Historical R4 build and deployment
+
+The preceding built/deployed revision (2026-10-05) was:
+
+```text
+MiSTer file: /media/fat/_Utility/VTG9000_20261005_r4.rbf
+Size:        2,508,568 bytes
+SHA-256:     6038c8b1d1fe8c48a0ca96478a4cfcdb47c52b4e0ef99a0fad8410fbb972116d
+```
+
+Quartus Prime Lite 17.0.2 Build 602 completed with zero errors. Setup slack is
++0.451 ns overall and +6.345 ns in the 27 MHz video domain; worst hold slack is
++0.253 ns. All simulations, lint, top-level syntax, and 36 golden-frame checks
+passed. Twelve unaffected original frames retain their baseline hashes. The
+ramp's pre-existing multiplication overflow was also corrected.
+
+The exact RBF was checksum-verified on `root@192.168.88.18` and loaded through
+`/dev/MiSTer_cmd`; `/tmp/CORENAME` reported `VTG9000`. MiSTer.ini was unchanged.
+CRT stability, visual results, and analog pedestal accuracy remain pending
+observation/measurement of this exact file. Full build and source-manifest
+records are in `docs/build-and-deployment.md`.
+
+## Historical R3 build and deployment
+
+The preceding built/deployed revision was:
 
 ```text
 MiSTer file: /media/fat/_Utility/VTG9000_20260905_r3.rbf
@@ -158,7 +262,8 @@ The RBF was checksum-verified after transfer and loaded through
 and core loading only. The user has not yet supplied a recorded visual result
 for R3 on the CRT.
 
-Earlier rollback files deliberately remain present:
+Earlier deployments used these rollback filenames. The user wiped the device
+before 2026-10-05, so do not assume they remain present:
 
 ```text
 /media/fat/_Utility/VTG9000_20260905.rbf
@@ -174,20 +279,23 @@ make test
 make lint
 make lint-top
 make verify-frames
-git diff --check
+make check-build-tools
+git diff --check -- . ':(exclude)build/**'
 git status --short sys
 ```
 
-`make verify-frames` regenerates fifteen PPMs and compares their hashes. It is
-expected to take longer than the other checks. Do not update
+`make verify-frames` regenerates 36 PPMs (18 patterns in both black-level modes) and compares their hashes. It is
+expected to take longer than the other checks; use `make -j8 verify-frames`
+for parallel rendering. The whitespace check excludes generated `build/`
+artifacts because raw Quartus reports contain trailing spaces. Do not update
 `tb/golden_frames.sha256` merely to accept a changed image; inspect intended
 artwork changes first.
 
 Build an RBF only after those checks pass:
 
 ```bash
-./tools/quartus_container_build.sh
-sha256sum build/quartus/VTG9000.rbf
+QUARTUS_OUTPUT_DIR="$PWD/build/quartus-local" ./tools/quartus_container_build.sh
+sha256sum build/quartus-local/VTG9000.rbf
 ```
 
 The wrapper pulls/runs `docker.io/theypsilon/quartus-lite-c5:17.0.2.docker0`,
@@ -197,13 +305,20 @@ unsandboxed invocation because its runtime uses `/run/user/1000/libpod`.
 
 ## MiSTer connection and safe deployment
 
-The MiSTer is attached directly by Ethernet. The last known shared-network
-addresses were host `10.42.0.1` and MiSTer `10.42.0.157`; DHCP may assign a
-different MiSTer address. A dedicated project SSH key may exist at
-`.local/mister_ed25519`.
+The MiSTer is on the network. As directed by the user on 2026-10-05, connect
+with:
 
-External writes and loading an RBF require current user authorization. Do not
-assume that a prior agent's authorization applies to a new task/harness.
+```sh
+ssh root@192.168.88.18
+```
+
+Use this address for future MiSTer access. The direct-Ethernet/shared-network
+addresses in `docs/mister-baseline.md` are historical. A dedicated project SSH
+key may exist at `.local/mister_ed25519`.
+
+The user authorized MiSTer interaction and commands on 2026-10-05 and reported
+that the device was wiped with no data requiring preservation. Continue within
+the requested core-development scope.
 
 Before deploying, inspect the live configuration rather than relying on the
 older baseline document. At the R3 deployment, the relevant live values were:
@@ -218,9 +333,9 @@ video_mode=0
 vsync_adjust=0
 ```
 
-`docs/mister-baseline.md` contains an earlier `composite_sync=1` observation;
-the R3 values above are the later authoritative observation. Do not alter
-MiSTer.ini merely to test a core unless the user explicitly asks.
+The R3 values above are historical. On 2026-10-05, the live values were the
+same except `composite_sync=1`. The new core relies on that framework setting,
+with no core sync selector. MiSTer.ini was not changed for R4.
 
 Use a new, explicit revision path and check it is unused before copying. After
 copying, run `sync`, compare the remote SHA-256 to the local SHA-256, and retain
@@ -239,7 +354,7 @@ display observation.
 The VTG400D/400 DVI manual is the main visual reference. It was supplied at:
 
 ```text
-/home/nsm/vtg9000/vtg400revc_man.pdf
+/home/nsm/src/vtg9000/fw/vtg400revc_man.pdf
 ```
 
 The repository does not contain or run Extron firmware. Firmware analysis did
@@ -265,16 +380,16 @@ bitstream cannot run directly on MiSTer's Cyclone V.
 
 ## Recommended next work
 
-1. Have the user visually test R3 on the actual 15 kHz CRT in default 480i and
+1. Have the user visually test the current RBF on the actual 15 kHz CRT in default 480i and
    then 240p. Obtain a short video or detailed description. Confirm whether
    480i is stable and whether 240p locks.
 2. If 480i still moves vertically, preserve the video evidence and investigate
    the complete sync path, including the SuperStation output mode, the core
-   RGBHV/RGBS setting, and equalizing/serration behavior. Do not "fix" it by
+   MiSTer.ini sync settings, and equalizing/serration behavior. Do not "fix" it by
    changing global MiSTer.ini settings without approval.
 3. Refine existing pattern geometry against the manual and captured VTG400
    output. Add a targeted test and golden-frame review for every visible change.
-4. Expand patterns from the currently implemented 15 toward the firmware's
+4. Expand patterns from the currently implemented 18 toward the firmware's
    34-name catalog. Keep rate-specific variants explicit rather than adding an
    ungrounded generic rate selector.
 5. Characterize named DAC/output profiles before making any reference-grade or
@@ -290,7 +405,8 @@ bitstream cannot run directly on MiSTer's Cyclone V.
 2. Make the smallest scoped change; leave `sys/` unchanged.
 3. Add or update simulation assertions for timing/control behavior.
 4. Run all local verification commands above.
-5. Inspect `git diff --check` and verify `sys/` remains untouched.
+5. Inspect `git diff --check -- . ':(exclude)build/**'` and verify `sys/`
+   remains untouched.
 6. If an RBF is needed, build with Quartus 17.0.2 and record size, hash, and
    timing results in `docs/build-and-deployment.md`.
 7. If deploying, obtain current authorization, use a new RBF name, verify its
