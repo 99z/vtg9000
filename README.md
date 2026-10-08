@@ -15,6 +15,12 @@ It is an independent behavioral implementation and does not run Extron firmware.
 
 *Simulator renders at 4:3 display aspect, not hardware captures.*
 
+## Color accuracy
+
+Remember that when using the MiSTer with an analog display the color accuracy will
+be largely dependent on how good of a DAC you're using. See [Kuro Houou](https://x.com/kurohouou)'s excellent [DAC Test Results spreadsheet](https://tinyurl.com/dactestresults) for guidance on picking a DAC to pair
+with your MiSTer.
+
 ## How to use it
 
 1. [Download the latest RBF](https://github.com/99z/vtg9000/raw/refs/heads/main/releases/VTG9000_20261005_r5.rbf)
